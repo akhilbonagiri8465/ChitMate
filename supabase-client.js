@@ -20,7 +20,12 @@
       signIn: async (email, password) => (await requireClient()).auth.signInWithPassword({ email, password }),
       signUp: async (email, password, role) => (await requireClient()).auth.signUp({ email, password, options: { data: { role } } }),
       signOut: async () => (await requireClient()).auth.signOut(),
-      currentUser: async () => (await requireClient()).auth.getUser()
+      currentUser: async () => (await requireClient()).auth.getUser(),
+      onChange: (callback) => client?.auth.onAuthStateChange(callback)
+    },
+    organizations: {
+      create: async (organization) => (await requireClient()).from('organizations').insert(organization).select().single(),
+      addMember: async (membership) => (await requireClient()).from('organization_memberships').upsert(membership).select().single()
     },
     profiles: {
       get: async (userId) => (await requireClient()).from('profiles').select('*').eq('user_id', userId).maybeSingle(),
@@ -40,7 +45,13 @@
     collections: {
       listCyclePayments: async (cycleId) => (await requireClient()).from('payments').select('*, members(full_name, phone)').eq('cycle_id', cycleId).order('paid_at', { ascending: false }),
       record: async (payment) => (await requireClient()).from('payments').insert(payment).select().single(),
-      update: async (id, changes) => (await requireClient()).from('payments').update(changes).eq('id', id).select().single()
+      update: async (id, changes) => (await requireClient()).from('payments').update(changes).eq('id', id).select().single(),
+      createReceipt: async (payment) => (await requireClient()).from('payments').insert({ ...payment, reference_number: payment.reference_number || `CHM-${Date.now()}` }).select().single(),
+      createReceiptForMember: async ({ organizationId, memberName, ...payment }) => { const api = await requireClient(); const member = await api.from('members').select('id, group_members(group_id)').eq('organization_id', organizationId).eq('full_name', memberName).single(); if (member.error) return member; const groupId = member.data.group_members?.[0]?.group_id; const cycle = await api.from('cycles').select('id').eq('group_id', groupId).eq('status', 'open').order('cycle_number', { ascending: false }).limit(1).single(); if (cycle.error) return cycle; return api.from('payments').insert({ ...payment, member_id: member.data.id, cycle_id: cycle.data.id, reference_number: payment.reference_number || `CHM-${Date.now()}` }).select().single(); }
+    },
+    invites: {
+      create: async (invite) => (await requireClient()).from('invite_links').insert(invite).select().single(),
+      accept: async (token, userId) => (await requireClient()).from('invite_links').update({ accepted_by: userId, accepted_at: new Date().toISOString(), status: 'accepted' }).eq('token', token).eq('status', 'pending').select().single()
     },
     auctions: {
       list: async (groupId) => (await requireClient()).from('auctions').select('*, cycles!inner(group_id, cycle_number, due_date), members(full_name)').eq('cycles.group_id', groupId).order('scheduled_at'),
