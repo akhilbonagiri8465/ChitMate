@@ -18,9 +18,13 @@
     client,
     auth: {
       signIn: async (email, password) => (await requireClient()).auth.signInWithPassword({ email, password }),
-      signUp: async (email, password) => (await requireClient()).auth.signUp({ email, password }),
+      signUp: async (email, password, role) => (await requireClient()).auth.signUp({ email, password, options: { data: { role } } }),
       signOut: async () => (await requireClient()).auth.signOut(),
       currentUser: async () => (await requireClient()).auth.getUser()
+    },
+    profiles: {
+      get: async (userId) => (await requireClient()).from('profiles').select('*').eq('user_id', userId).maybeSingle(),
+      save: async (profile) => (await requireClient()).from('profiles').upsert(profile, { onConflict: 'user_id' }).select().single()
     },
     groups: {
       list: async (organizationId) => (await requireClient()).from('chit_groups').select('*').eq('organization_id', organizationId).order('created_at', { ascending: false }),
